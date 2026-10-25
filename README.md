@@ -17,6 +17,42 @@ Do not overwrite an existing app directory. Back up the site before installation
 
 ## Configure
 
+### Invoice payment workflow
+
+The opt-in invoice workflow now adds **Payment Terminal Route** (cashier, company,
+Mode of Payment, agent and approved device). It can queue full-payment draft
+invoices automatically on save, broadcasts authenticated socket updates, and
+requires explicit user submission after terminal approval. Regular Sales Invoice
+submission creates a native Payment Entry; POS invoices use native POS accounting.
+See `docs/frappe-payment-flow.md` in the desktop repository for deployment,
+POS/mobile API integration, limitations and required staging acceptance tests.
+This does not auto-integrate third-party POS/mobile UIs or approve live terminals.
+
+After deploying on a **staging** bench, back up and migrate:
+
+```sh
+bench --site ksa.mysys.digital backup --with-files
+bench --site ksa.mysys.digital migrate
+bench build --app payment_terminal_bridge
+bench --site ksa.mysys.digital clear-cache
+bench restart
+```
+
+Create a Payment Terminal Route for the sales user (not the dedicated API user),
+company, Bank Mode of Payment, agent and device. Leave automatic sending off until
+operator approval: enabling it can charge real money on draft save. Configure the
+SAR bank account and Payment Entry create/submit permissions for regular Sales
+Invoice before requesting payment. Full SAR payments only, one payment mode, no
+advances, loyalty or write-off. The accounting adapter targets ERPNext v15 and
+requires bench integration tests against the installed version.
+
+POS/mobile clients must save a draft then POST
+`payment_terminal_bridge.invoice_flow.request_payment` with `invoice_type` and
+`invoice_name`. Read `payment_terminal_bridge.invoice_flow.invoice_status` on
+`payment_terminal_update` (authenticated cashier socket room), on reconnect and
+every 15 seconds as fallback. Submit only after explicit user approval; never
+infer success from a socket event. Custom mobile/POS screens need this integration.
+
 1. Create a dedicated, enabled API user (not Administrator), assign only the `Payment Terminal Agent` role, and generate API key/secret credentials. The install hook provisions the role; it does not assign it or generate credentials.
 2. As System Manager create a **Payment Terminal Agent** with an ASCII name of 3–80 characters, that user, the permitted company, and an administrator-approved registry. Start disabled and in test mode. Example registry:
 

@@ -11,7 +11,7 @@ import uuid
 import frappe
 from frappe.utils import cint, now_datetime
 
-from payment_terminal_bridge.policy import FINAL, OPEN, minor_units, validate_report
+from payment_terminal_bridge.policy import FINAL, OPEN, validate_report
 
 AGENT = "Payment Terminal Agent"
 REQUEST = "Payment Terminal Request"
@@ -74,7 +74,7 @@ def _publish(doc):
         "request": doc.name, "invoice_type": doc.invoice_type, "invoice_name": doc.invoice_name,
         "status": doc.status, "amount_minor": doc.amount_minor, "currency": doc.currency,
         "terminal_verified": bool(doc.terminal_verified), "evidence_source": "agent_attestation",
-        "accounting_posted": False, "provider_reference": doc.provider_reference,
+        "accounting_posted": bool(doc.get("invoice_submitted")), "provider_reference": doc.provider_reference,
     }, user=doc.cashier, after_commit=True)
 
 
@@ -142,6 +142,11 @@ def report_result(agent, payload):
     report = _object(payload)
     if len(json.dumps(report)) > 8192:
         frappe.throw("Report too large")
+    routing = frappe.db.get_value(REQUEST, report.get("request"), ["invoice_type", "invoice_name"], as_dict=True)
+    if not routing:
+        frappe.throw("Payment request not found")
+    # Consistent lock order with invoice save/submit: invoice -> request.
+    _lock(routing.invoice_type, routing.invoice_name)
     _lock(REQUEST, report.get("request"))
     doc = frappe.get_doc(REQUEST, report.get("request"))
     if doc.agent != owner.name:
@@ -159,6 +164,8 @@ def report_result(agent, payload):
             doc.set(field, validated[field])
     doc.result_json = json.dumps(validated, separators=(",", ":"))
     doc.save(ignore_permissions=True)
+    from payment_terminal_bridge.invoice_flow import record_result
+    record_result(doc)
     _publish(doc)
     return {"accepted": True, "status": doc.status}
 
@@ -191,7 +198,6 @@ def create_request(agent, device_id, invoice_type, invoice_name, idempotency_key
     owner = _agent(agent, own=False)
     if owner.company != frappe.db.get_value(invoice_type, invoice_name, "company"):
         frappe.throw("Agent company mismatch")
-    _lock(AGENT, owner.name)
     device = _device(owner, device_id)
     registered_mode = device.get("payment_mode")
     if not registered_mode or (payment_mode and payment_mode != registered_mode):
@@ -200,6 +206,14 @@ def create_request(agent, device_id, invoice_type, invoice_name, idempotency_key
     invoice = _invoice(invoice_type, invoice_name)
     _lock(invoice_type, invoice_name)
     invoice.reload()
+    from payment_terminal_bridge.invoice_policy import full_payment, invoice_snapshot
+    if operation == "sale":
+        from payment_terminal_bridge.invoice_flow import _route
+        route = _route(invoice, payment_mode, required=True)
+        if route.agent != agent or route.device_id != device_id:
+            frappe.throw("مسار الجهاز غير مصرح به لهذا المستخدم", frappe.PermissionError)
+        if invoice.docstatus != 0:
+            frappe.throw("ابدأ الدفع من مسودة الفاتورة ثم اعتمدها بعد نجاح الدفع")
     # Replay compares immutable routing, not today's outstanding balance (which may now be zero).
     existing_name = frappe.db.get_value(REQUEST, {"idempotency_key": idempotency_key}, "name")
     if existing_name:
@@ -221,7 +235,12 @@ def create_request(agent, device_id, invoice_type, invoice_name, idempotency_key
             frappe.throw("Approved original required")
         amount = original.amount_minor  # Full adjustments only; partial refunds require a separate accounting design.
     else:
-        amount = minor_units(invoice.outstanding_amount if invoice.docstatus == 1 else invoice.rounded_total or invoice.grand_total)
+        from payment_terminal_bridge.invoice_flow import check_accounting_setup
+        check_accounting_setup(invoice, payment_mode)
+        try:
+            amount = full_payment(invoice.as_dict(), payment_mode)
+        except ValueError as exc:
+            frappe.throw(str(exc))
     identity = [agent, device_id, invoice_type, invoice_name, operation, original_request or "", amount, frappe.session.user]
     fingerprint = hashlib.sha256(json.dumps(identity, separators=(",", ":")).encode()).hexdigest()
     existing = frappe.db.get_value(REQUEST, {"idempotency_key": idempotency_key}, ["name", "fingerprint"], as_dict=True)
@@ -240,8 +259,11 @@ def create_request(agent, device_id, invoice_type, invoice_name, idempotency_key
         "agent": agent, "device_id": device_id, "operation": operation, "original_request": original_request,
         "invoice_type": invoice_type, "invoice_name": invoice_name, "company": invoice.company,
         "cashier": frappe.session.user, "currency": "SAR", "amount_minor": amount, "payment_mode": payment_mode,
-        "idempotency_key": idempotency_key, "fingerprint": fingerprint, "status": "QUEUED"})
+        "idempotency_key": idempotency_key, "fingerprint": fingerprint, "status": "QUEUED",
+        "invoice_snapshot": invoice_snapshot(invoice.as_dict())})
     doc.insert(ignore_permissions=True)
+    from payment_terminal_bridge.invoice_flow import record_result
+    record_result(doc)
     _nudge(owner)
     _publish(doc)
     return {"request": doc.name}
@@ -250,6 +272,8 @@ def create_request(agent, device_id, invoice_type, invoice_name, idempotency_key
 @frappe.whitelist(methods=["POST"])
 def cancel_request(name):
     _cashier()
+    routing = frappe.get_doc(REQUEST, name)
+    _lock(routing.invoice_type, routing.invoice_name)
     _lock(REQUEST, name)
     doc = frappe.get_doc(REQUEST, name)
     _invoice(doc.invoice_type, doc.invoice_name)
@@ -269,4 +293,6 @@ def get_status(name):
     doc = frappe.get_doc(REQUEST, name)
     _invoice(doc.invoice_type, doc.invoice_name)
     return {"request": doc.name, "status": doc.status, "terminal_verified": bool(doc.terminal_verified),
-            "provider_reference": doc.provider_reference, "accounting_posted": False}
+            "provider_reference": doc.provider_reference,
+            "accounting_posted": bool(doc.get("invoice_submitted")),
+            "accounting_payment": doc.get("accounting_payment")}

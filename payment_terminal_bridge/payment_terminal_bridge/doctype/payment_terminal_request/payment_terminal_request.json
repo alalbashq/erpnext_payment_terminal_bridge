@@ -5,8 +5,11 @@
  "autoname": "hash",
  "allow_rename": 0,
  "engine": "InnoDB",
- "field_order": ["agent", "device_id", "payment_mode", "operation", "original_request", "invoice_type", "invoice_name", "company", "cashier", "currency", "amount_minor", "idempotency_key", "fingerprint", "status", "cancel_requested", "last_claimed_at", "terminal_verified", "agent_attempt_id", "provider_reference", "ecr_reference", "rrn", "stan", "auth_code", "error_code", "result_json"],
+ "field_order": ["agent", "device_id", "payment_mode", "operation", "original_request", "invoice_type", "invoice_name", "invoice_snapshot", "accounting_payment", "invoice_submitted", "company", "cashier", "currency", "amount_minor", "idempotency_key", "fingerprint", "status", "cancel_requested", "last_claimed_at", "terminal_verified", "agent_attempt_id", "provider_reference", "ecr_reference", "rrn", "stan", "auth_code", "error_code", "result_json"],
  "fields": [
+  {"fieldname": "invoice_snapshot", "label": "Invoice Snapshot Hash", "fieldtype": "Data", "read_only": 1},
+  {"fieldname": "accounting_payment", "label": "Accounting Payment", "fieldtype": "Link", "options": "Payment Entry", "read_only": 1},
+  {"fieldname": "invoice_submitted", "label": "Invoice Submitted After Payment", "fieldtype": "Check", "default": "0", "read_only": 1},
   {"fieldname": "payment_mode", "label": "Payment Mode", "fieldtype": "Link", "options": "Mode of Payment"},
   {"fieldname": "agent", "label": "Agent", "fieldtype": "Link", "options": "Payment Terminal Agent", "reqd": 1, "search_index": 1},
   {"fieldname": "device_id", "label": "Device ID", "fieldtype": "Data", "reqd": 1},

@@ -1,0 +1,20 @@
+{
+ "doctype": "DocType",
+ "name": "Payment Terminal Route",
+ "module": "Payment Terminal Bridge",
+ "autoname": "hash",
+ "track_changes": 1,
+ "engine": "InnoDB",
+ "field_order": ["enabled", "cashier", "company", "payment_mode", "agent", "device_id", "auto_send", "route_key"],
+ "fields": [
+  {"fieldname": "enabled", "label": "Enabled", "fieldtype": "Check", "default": "0"},
+  {"fieldname": "cashier", "label": "Cashier User", "fieldtype": "Link", "options": "User", "reqd": 1},
+  {"fieldname": "company", "label": "Company", "fieldtype": "Link", "options": "Company", "reqd": 1},
+  {"fieldname": "payment_mode", "label": "Mode of Payment", "fieldtype": "Link", "options": "Mode of Payment", "reqd": 1},
+  {"fieldname": "agent", "label": "Agent", "fieldtype": "Link", "options": "Payment Terminal Agent", "reqd": 1},
+  {"fieldname": "device_id", "label": "Approved Device ID", "fieldtype": "Data", "reqd": 1},
+  {"fieldname": "auto_send", "label": "Send Payment Automatically on Draft Save", "fieldtype": "Check", "default": "0", "description": "Enabling this can charge real money when the cashier saves an eligible draft. Enable only after terminal UAT and cashier training."},
+  {"fieldname": "route_key", "label": "Unique Cashier / Company / Payment Mode", "fieldtype": "Data", "unique": 1, "read_only": 1, "hidden": 1}
+ ],
+ "permissions": [{"role": "System Manager", "read": 1, "write": 1, "create": 1}]
+}
