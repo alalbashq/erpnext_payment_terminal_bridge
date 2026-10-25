@@ -1,0 +1,9 @@
+app_name = "payment_terminal_bridge"
+app_title = "Payment Terminal Bridge"
+app_publisher = "Payment Terminal Bridge contributors"
+app_description = "Durable requests for Windows payment terminals"
+app_email = ""
+app_license = "MIT"
+required_apps = ["erpnext"]
+before_install = "payment_terminal_bridge.install.ensure_roles"
+after_migrate = "payment_terminal_bridge.install.ensure_roles"

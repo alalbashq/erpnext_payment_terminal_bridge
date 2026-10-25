@@ -1,0 +1,21 @@
+{
+ "doctype": "DocType",
+ "name": "Payment Terminal Agent",
+ "module": "Payment Terminal Bridge",
+ "autoname": "Prompt",
+ "allow_rename": 0,
+ "engine": "InnoDB",
+ "track_changes": 1,
+ "field_order": ["enabled", "agent_user", "company", "test_mode", "devices_json", "last_seen", "agent_version", "reported_devices"],
+ "fields": [
+  {"fieldname": "enabled", "label": "Enabled", "fieldtype": "Check", "default": "0"},
+  {"fieldname": "agent_user", "label": "Dedicated Agent User", "fieldtype": "Link", "options": "User", "reqd": 1, "unique": 1},
+  {"fieldname": "company", "label": "Company", "fieldtype": "Link", "options": "Company", "reqd": 1},
+  {"fieldname": "test_mode", "label": "Test Mode (allows mock)", "fieldtype": "Check", "default": "0"},
+  {"fieldname": "devices_json", "label": "Administrator-approved Devices", "fieldtype": "Code", "options": "JSON", "reqd": 1, "default": "[]"},
+  {"fieldname": "last_seen", "label": "Last Seen", "fieldtype": "Datetime", "read_only": 1},
+  {"fieldname": "agent_version", "label": "Agent Version", "fieldtype": "Data", "read_only": 1},
+  {"fieldname": "reported_devices", "label": "Reported Devices (diagnostic only)", "fieldtype": "Code", "options": "JSON", "read_only": 1}
+ ],
+ "permissions": [{"role": "System Manager", "read": 1, "write": 1, "create": 1}]
+}
